@@ -13,10 +13,12 @@
 
 """Check emails and trigger build/boot reports."""
 
+import ConfigParser
 import argparse
 import email
 import imaplib
 import logging
+import os
 import re
 import sys
 import time
@@ -25,6 +27,7 @@ import time
 
 # Where to read the configuration from by default.
 DEFAULT_CONFIG_FILE = "/etc/linaro/kernelci-reports.cfg"
+CONFIG_FILE_SECTION = "kernelci"
 
 # Default IMAP server to connect to.
 DEFAULT_IMAP_SERVER = "imap.gmail.com"
@@ -32,7 +35,7 @@ DEFAULT_IMAP_SERVER = "imap.gmail.com"
 DEFAULT_IMAP_PORT = 993
 
 # Check emails every 15 minutes by default.
-DEFAULT_SLEEP = 900
+DEFAULT_SLEEP = 900.0
 
 # TODO: define custom headers.
 CUSTOM_HEADERS = []
@@ -50,7 +53,16 @@ SUBJECT_PATCH_RGX = re.compile(
 SUBJECT_RE_RGX = re.compile(r"^Re:?")
 
 # pylint: disable=invalid-name
+# Setup logging here, and by default set INFO level.
 log = logging.getLogger("kernelci-reports")
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(
+    logging.Formatter("%(levelname)s - %(message)s"))
+
+console_handler.setLevel(logging.INFO)
+log.setLevel(logging.INFO)
+
+log.addHandler(console_handler)
 
 
 def extract_kernel_version(subject):
@@ -60,7 +72,7 @@ def extract_kernel_version(subject):
     the necessary values of:
 
     . patches: The total number of patches that are part of the test.
-    . version: The kernel version that will be released, as a list of numbers.
+    . version: The kernel version that will be released, as a list of strings.
     . tree: The name of the kernel tree.
 
     :param subject: The email subject to parse.
@@ -109,6 +121,9 @@ def check_emails(options):
     """Check for new emails via IMAP protocol.
 
     Will only check the default 'INBOX' mail box.
+
+    :param options: The configuration options.
+    :type options: dict
     """
     log.debug("Checking emails...")
 
@@ -139,26 +154,6 @@ def check_emails(options):
         sys.exit(1)
 
 
-def setup_logging(debug=False):
-    """Setup and configure logging infrastructure.
-
-    :param debug: If debug logging should be enabled. Default False.
-    :type debug: bool
-    """
-    console_handler = logging.StreamHandler()
-    console_handler.setFormatter(
-        logging.Formatter("%(levelname)s - %(message)s"))
-
-    if debug:
-        log.setLevel(logging.DEBUG)
-        console_handler.setLevel(logging.DEBUG)
-    else:
-        log.setLevel(logging.INFO)
-        console_handler.setLevel(logging.INFO)
-
-    log.addHandler(console_handler)
-
-
 def setup_args():
     """Setup command line arguments parsing.
 
@@ -169,26 +164,30 @@ def setup_args():
 
     parser.add_argument(
         "--mail-server",
+        type=str,
         dest="mail_server",
         help="The IMAP server to connect to", default=DEFAULT_IMAP_SERVER
     )
     parser.add_argument(
         "--mail-server-port",
+        type=str,
         dest="mail_server_port",
         help="The IMAP server port", default=DEFAULT_IMAP_PORT
     )
     parser.add_argument(
         "--user-name",
+        type=str,
         dest="user_name", help="The user name to use for the server connection"
     )
     parser.add_argument(
         "--user-password",
+        type=str,
         dest="user_password",
         help="Password to authenticate to the mail server"
     )
     parser.add_argument(
         "--check-every",
-        type=int,
+        type=float,
         default=DEFAULT_SLEEP,
         dest="check_every",
         help="Number of seconds to wait for each check (default: 900)")
@@ -204,18 +203,43 @@ def parse_config_file():
 
     :return dict The options read as a dictionary.
     """
-    # TODO
-    pass
+    config_values = {}
+    if os.path.isfile(os.path.abspath(DEFAULT_CONFIG_FILE)):
+        try:
+            cfg_parser = ConfigParser.ConfigParser()
+            cfg_parser.read(DEFAULT_CONFIG_FILE)
+            config_values = dict(cfg_parser.items(CONFIG_FILE_SECTION))
+        except ConfigParser.Error:
+            log.error("Error opening or parsing the configuration file")
+            sys.exit(1)
+    else:
+        log.info("No configuration file provided")
+
+    return config_values
 
 
 if __name__ == "__main__":
     args = setup_args()
-    setup_logging(debug=args["debug"])
+    config = parse_config_file()
+
+    for k, v in config.iteritems():
+        if v is not None:
+            args[k] = v
+
+    if args["debug"]:
+        console_handler.setLevel(logging.DEBUG)
+        log.setLevel(logging.DEBUG)
+
+    if any([not args.get("user_name", None),
+            not args.get("user_password", None)]):
+        log.error("Missing user name or password, aborting")
+        sys.exit(1)
 
     try:
         while True:
             check_emails(args)
-            log.debug("Sleeping for %d seconds...", args["check_every"])
-            time.sleep(args["check_every"])
+            log.debug("Sleeping for %s seconds...", args["check_every"])
+            time.sleep(float(args["check_every"]))
     except KeyboardInterrupt:
         log.info("Interrupted by the user, exiting.")
+        sys.exit(0)
