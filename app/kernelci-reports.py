@@ -20,6 +20,7 @@ import imaplib
 import logging
 import os
 import re
+import signal
 import sys
 import time
 
@@ -251,10 +252,25 @@ def parse_config_file():
     return config_values
 
 
+def sig_term_handler(num, frname):
+    """Handle SIGTERM signal."""
+    log.info("Received signal %d, terminating", num)
+    sys.exit(0)
+
+
+def setup_signals():
+    """Setup signal handlers."""
+    signal.signal(signal.SIGTERM, sig_term_handler)
+    signal.signal(signal.SIGQUIT, sig_term_handler)
+
+
 if __name__ == "__main__":
+    setup_signals()
+
     args = setup_args()
     config = parse_config_file()
 
+    # Update args from the one found in the config file.
     for k, v in config.iteritems():
         if v is not None:
             args[k] = v
