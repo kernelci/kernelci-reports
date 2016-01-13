@@ -27,7 +27,15 @@ import time
 
 # Where to read the configuration from by default.
 DEFAULT_CONFIG_FILE = "/etc/linaro/kernelci-reports.cfg"
-CONFIG_FILE_SECTION = "kernelci"
+CONFIG_SECTION = "kernelci"
+
+# Destination variables
+DEST_CHECK_EVERY = "check_every"
+DEST_DEBUG = "debug"
+DEST_SERVER = "mail_server"
+DEST_SERVER_PORT = "mail_server_port"
+DEST_USER_NAME = "user_name"
+DEST_USER_PASSWORD = "user_password"
 
 # Default IMAP server to connect to.
 DEFAULT_IMAP_SERVER = "imap.gmail.com"
@@ -165,35 +173,36 @@ def setup_args():
     parser.add_argument(
         "--mail-server",
         type=str,
-        dest="mail_server",
+        dest=DEST_SERVER,
         help="The IMAP server to connect to", default=DEFAULT_IMAP_SERVER
     )
     parser.add_argument(
         "--mail-server-port",
         type=str,
-        dest="mail_server_port",
+        dest=DEST_SERVER_PORT,
         help="The IMAP server port", default=DEFAULT_IMAP_PORT
     )
     parser.add_argument(
         "--user-name",
         type=str,
-        dest="user_name", help="The user name to use for the server connection"
+        dest=DEST_USER_NAME,
+        help="The user name to use for the server connection"
     )
     parser.add_argument(
         "--user-password",
         type=str,
-        dest="user_password",
+        dest=DEST_USER_PASSWORD,
         help="Password to authenticate to the mail server"
     )
     parser.add_argument(
         "--check-every",
         type=float,
         default=DEFAULT_SLEEP,
-        dest="check_every",
+        dest=DEST_CHECK_EVERY,
         help="Number of seconds to wait for each check (default: 900)")
     parser.add_argument(
         "--debug",
-        dest="debug", action="store_true", help="Enable debug output")
+        dest=DEST_DEBUG, action="store_true", help="Enable debug output")
 
     return vars(parser.parse_args())
 
@@ -208,7 +217,31 @@ def parse_config_file():
         try:
             cfg_parser = ConfigParser.ConfigParser()
             cfg_parser.read(DEFAULT_CONFIG_FILE)
-            config_values = dict(cfg_parser.items(CONFIG_FILE_SECTION))
+
+            if cfg_parser.has_option(CONFIG_SECTION, DEST_DEBUG):
+                config_values[DEST_DEBUG] = cfg_parser.getboolean(
+                    CONFIG_SECTION, DEST_DEBUG)
+
+            if cfg_parser.has_option(CONFIG_SECTION, DEST_SERVER):
+                config_values[DEST_SERVER] = cfg_parser.get(
+                    CONFIG_SECTION, DEST_SERVER)
+
+            if cfg_parser.has_option(CONFIG_SECTION, DEST_SERVER_PORT):
+                config_values[DEST_SERVER_PORT] = cfg_parser.get(
+                    CONFIG_SECTION, DEST_SERVER_PORT)
+
+            if cfg_parser.has_option(CONFIG_SECTION, DEST_USER_NAME):
+                config_values[DEST_USER_NAME] = cfg_parser.get(
+                    CONFIG_SECTION, DEST_USER_NAME)
+
+            if cfg_parser.has_option(CONFIG_SECTION, DEST_USER_PASSWORD):
+                config_values[DEST_USER_PASSWORD] = cfg_parser.get(
+                    CONFIG_SECTION, DEST_USER_PASSWORD)
+
+            if cfg_parser.has_option(CONFIG_SECTION, DEST_CHECK_EVERY):
+                config_values[DEST_CHECK_EVERY] = cfg_parser.getfloat(
+                    CONFIG_SECTION, DEST_CHECK_EVERY)
+
         except ConfigParser.Error:
             log.error("Error opening or parsing the configuration file")
             sys.exit(1)
@@ -226,7 +259,7 @@ if __name__ == "__main__":
         if v is not None:
             args[k] = v
 
-    if args["debug"]:
+    if bool(args["debug"]):
         console_handler.setLevel(logging.DEBUG)
         log.setLevel(logging.DEBUG)
 
@@ -236,6 +269,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     try:
+        log.info("Starting email reports checking system")
         while True:
             check_emails(args)
             log.debug("Sleeping for %s seconds...", args["check_every"])
