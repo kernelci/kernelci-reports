@@ -81,7 +81,7 @@ def extract_kernel_version(subject):
     the necessary values of:
 
     . patches: The total number of patches that are part of the test.
-    . version: The kernel version that will be released, as a list of strings.
+    . version: The kernel version that will be released.
     . tree: The name of the kernel tree.
 
     :param subject: The email subject to parse.
@@ -95,12 +95,9 @@ def extract_kernel_version(subject):
             patches = matched.group("patches")
             patches = patches.split("/")[1]
 
-            version = matched.group("version")
-            version = version.split(".")
-
             extracted = {
                 "tree": matched.group("tree"),
-                "version": version,
+                "version": matched.group("version"),
                 "patches": patches
             }
 
