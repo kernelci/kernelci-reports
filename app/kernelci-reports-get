@@ -49,7 +49,7 @@ def setup_args():
     :return dict The parsed command line arguments as a dictionary.
     """
     parser = argparse.ArgumentParser(
-        description="Wait for emails and send build/boot reports.")
+        description="Wait for emails and parse them.")
 
     parser.add_argument(
         "--mail-server",
@@ -67,7 +67,7 @@ def setup_args():
         "--mail-username",
         type=str,
         dest=utils.MAIL_USERNAME,
-        help="The user name to use for the server connection"
+        help="The user name to use for the mail server connection"
     )
     parser.add_argument(
         "--mail-password",
@@ -76,11 +76,35 @@ def setup_args():
         help="Password to authenticate to the mail server"
     )
     parser.add_argument(
+        "--database-server",
+        type=str,
+        dest=utils.DB_SERVER,
+        help="The database URL to connect to", default="localhost"
+    )
+    parser.add_argument(
+        "--database-server-port",
+        type=str,
+        dest=utils.DB_SERVER_PORT,
+        help="The database server port", default=27017
+    )
+    parser.add_argument(
+        "--database-username",
+        type=str,
+        dest=utils.DB_USERNAME,
+        help="The user name to use for the database server connection"
+    )
+    parser.add_argument(
+        "--database-password",
+        type=str,
+        dest=utils.DB_PASSWORD,
+        help="Password to authenticate to the database server"
+    )
+    parser.add_argument(
         "--check-every",
         type=float,
         default=DEFAULT_SLEEP,
         dest=utils.CHECK_EVERY,
-        help="Number of seconds to wait for each check (default: 900)")
+        help="Number of seconds to wait for each check")
     parser.add_argument(
         "--debug",
         dest=utils.DEBUG, action="store_true", help="Enable debug output")

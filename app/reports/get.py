@@ -33,8 +33,8 @@ def ensure_indexes(options):
     :type options: dict
     """
     log.debug("Creating/Updating database indexes...")
+    connection = utils.db.get_connection(options)
     try:
-        connection = utils.db.get_connection(options)
         database = connection[utils.db.DB_NAME]
 
         if database:
