@@ -36,6 +36,22 @@ SUBJECT_RE_RGX = re.compile(r"^Re:?")
 CUSTOM_HEADERS = []
 
 
+def fix_kernel_version(version):
+    """Make sure the kernel version is correct.
+
+    When we get an email, usually we get the kernel version for an unreleased
+    kernel. We need to subtract 1 to the last version format number.
+
+    :param version: The kernel version as obtained from the email.
+    :type version: str
+    :return str The updated kernel version.
+    """
+    version = version.split(".")
+    version[-1] = str(int(version[-1]) - 1)
+
+    return ".".join(version)
+
+
 def extract_kernel_version(subject):
     """Extract the kernel version and patches info from the subject.
 
@@ -57,9 +73,11 @@ def extract_kernel_version(subject):
             patches = matched.group("patches")
             patches = patches.split("/")[1]
 
+            version = fix_kernel_version(matched.group("version"))
+
             extracted = {
                 "tree": matched.group("tree"),
-                "version": matched.group("version"),
+                "version": version,
                 "patches": patches
             }
 
