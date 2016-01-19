@@ -47,9 +47,24 @@ def fix_kernel_version(version):
     :return str The updated kernel version.
     """
     version = version.split(".")
-    version[-1] = str(int(version[-1]) - 1)
 
-    return ".".join(version)
+    # Do the "conversion" only if we have some valid values: meaning that we
+    # have something when we split the provided version string.
+    if len(version) >= 2:
+        try:
+            # XXX: What should happen if we have a 4.0 kernel version?
+            if version[-1] != "0":
+                version[-1] = str(int(version[-1]) - 1)
+            else:
+                log.warn("Kernel version has a 0, don't know how to proceed")
+        except ValueError:
+            log.error("Got non parsable kernel version: %s", version)
+        finally:
+            version = ".".join(version)
+    else:
+        version = version[0]
+
+    return version
 
 
 def extract_kernel_version(subject):
