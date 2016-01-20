@@ -1,0 +1,167 @@
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+"""Send build/boot reports."""
+
+import argparse
+import configparser
+import logging
+import os
+import sys
+import time
+
+import utils
+import reports.send
+
+# pylint: disable=invalid-name
+# Setup logging here, and by default set INFO level.
+log = logging.getLogger("kernelci-reports")
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(
+    logging.Formatter("%(levelname)s - %(message)s"))
+
+console_handler.setLevel(logging.INFO)
+log.setLevel(logging.INFO)
+
+log.addHandler(console_handler)
+
+
+def setup_args():
+    """Setup command line arguments parsing.
+
+    :return dict The parsed command line arguments as a dictionary.
+    """
+    parser = argparse.ArgumentParser(
+        description="Check backepd API and send build/boot reports.")
+
+    parser.add_argument(
+        "--database-server",
+        type=str,
+        dest=utils.DB_SERVER,
+        help="The database URL to connect to", default="localhost"
+    )
+    parser.add_argument(
+        "--database-server-port",
+        type=str,
+        dest=utils.DB_SERVER_PORT,
+        help="The database server port", default=27017
+    )
+    parser.add_argument(
+        "--database-username",
+        type=str,
+        dest=utils.DB_USERNAME,
+        help="The user name to use for the database server connection"
+    )
+    parser.add_argument(
+        "--database-password",
+        type=str,
+        dest=utils.DB_PASSWORD,
+        help="Password to authenticate to the database server"
+    )
+    parser.add_argument(
+        "--check-every",
+        type=float,
+        default=900.0,
+        dest=utils.CHECK_EVERY,
+        help="Number of seconds to wait for each check")
+    parser.add_argument(
+        "--max-retries",
+        type=int,
+        default=6,
+        dest=utils.MAX_RETRIES,
+        help="How many times to check for each single report")
+    parser.add_argument(
+        "--debug",
+        dest=utils.DEBUG, action="store_true", help="Enable debug output")
+
+    return vars(parser.parse_args())
+
+
+def parse_config_file():
+    """Parse the configuration file.
+
+    :return dict The options read as a dictionary.
+    """
+    config_values = {}
+    if os.path.isfile(os.path.abspath(utils.DEFAULT_CONFIG_FILE)):
+        try:
+            cfg_parser = configparser.ConfigParser()
+            cfg_parser.read(utils.DEFAULT_CONFIG_FILE)
+
+            default_section = cfg_parser[utils.CONFIG_SECTION]
+
+            if utils.DEBUG in default_section:
+                config_values[utils.DEBUG] = cfg_parser.getboolean(
+                    utils.CONFIG_SECTION, utils.DEBUG)
+
+            if utils.MAIL_SERVER in default_section:
+                config_values[utils.MAIL_SERVER] = cfg_parser.get(
+                    utils.CONFIG_SECTION, utils.MAIL_SERVER)
+
+            if utils.MAIL_SERVER_PORT in default_section:
+                config_values[utils.MAIL_SERVER_PORT] = cfg_parser.get(
+                    utils.CONFIG_SECTION, utils.MAIL_SERVER_PORT)
+
+            if utils.MAIL_USERNAME in default_section:
+                config_values[utils.MAIL_USERNAME] = cfg_parser.get(
+                    utils.CONFIG_SECTION, utils.MAIL_USERNAME)
+
+            if utils.MAIL_PASSWORD in default_section:
+                config_values[utils.MAIL_PASSWORD] = cfg_parser.get(
+                    utils.CONFIG_SECTION, utils.MAIL_PASSWORD, raw=True)
+
+            if utils.CHECK_EVERY in default_section:
+                config_values[utils.CHECK_EVERY] = cfg_parser.getfloat(
+                    utils.CONFIG_SECTION, utils.CHECK_EVERY)
+
+            if utils.BACKEND_TOKEN in default_section:
+                config_values[utils.BACKEND_TOKEN] = cfg_parser.get(
+                    utils.CONFIG_SECTION, utils.BACKEND_TOKEN)
+
+            if utils.BACKEND_URL in default_section:
+                config_values[utils.BACKEND_URL] = cfg_parser.get(
+                    utils.CONFIG_SECTION, utils.BACKEND_URL)
+
+        except configparser.Error as ex:
+            log.exception(ex)
+            log.error("Error opening or parsing the configuration file")
+            sys.exit(1)
+    else:
+        log.info("No configuration file provided")
+
+    return config_values
+
+
+if __name__ == "__main__":
+    options = setup_args()
+    config = parse_config_file()
+
+    # Update args from the one found in the config file.
+    for k, v in config.items():
+        if v is not None:
+            options[k] = v
+
+    if bool(options[utils.DEBUG]):
+        console_handler.setLevel(logging.DEBUG)
+        log.setLevel(logging.DEBUG)
+
+    try:
+        log.info("Starting reports triggering system")
+
+        while True:
+            reports.send.check_and_send(options)
+            log.debug("Sleeping for %s seconds...", options[utils.CHECK_EVERY])
+            time.sleep(float(options[utils.CHECK_EVERY]))
+    except KeyboardInterrupt:
+        log.info("Interrupted by the user, exiting.")
+        sys.exit(0)
