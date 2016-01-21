@@ -27,6 +27,10 @@ log = logging.getLogger("kernelci-reports")
 SEND_DELAY = 5
 # TODO: need a better check for different git_describe format.
 GIT_DESCRIBE_MATCHER = r"^v{0:s}-{1:s}-g(.*)"
+# Format string to re-build to from email address.
+FROM_ADR_FMT = "{0:s} <{1:s}>"
+# Format string for the reply message.
+REPLY_FMT = "Re: {0:s}"
 
 
 def send_report(result, report, options):
@@ -39,7 +43,27 @@ def send_report(result, report, options):
     :param options: The app configuration parameters.
     :type options: dict
     """
-    url = options[utils.BACKEND_URL] + "/send"
+    url = options[utils.BACKEND_URL]
+    if url[-1] == "/":
+        url += "send"
+    else:
+        url += "/send"
+
+    report_get = report.get
+
+    send_to = []
+    from_addr = None
+
+    if report_get("from")[0]:
+        from_addr = FROM_ADR_FMT.format(
+            report_get("from")[0], report_get("from")[1])
+    else:
+        from_addr = report_get("from")[1]
+
+    send_to.append(from_addr)
+    if report_get("to", None):
+        send_to.extend(report_get("to"))
+
     # TODO: need a way to customize some of these values.
     data = {
         "delay": SEND_DELAY,
@@ -47,12 +71,18 @@ def send_report(result, report, options):
         "job": result["job"],
         "kernel": result["kernel"],
         "format": ["txt"],
-        # TODO: complete these, need to merge the from address.
-        "send_to": report["to"],
-        "send_cc": report["cc"],
-        "in_reply_to": report["message_id"],
-        "subject": report["subject"]
+        "send_to": send_to
     }
+
+    if report_get("message_id", None):
+        data["in_reply_to"] = report_get("message_id")
+
+    if report_get("subject", None):
+        data["subject"] = REPLY_FMT.format(report_get("subject"))
+
+    if report_get("cc", None):
+        data["send_cc"] = report_get("cc")
+
     return utils.backend.post(url, data)
 
 
@@ -84,9 +114,14 @@ def is_valid_result(result, report):
     pattern = GIT_DESCRIBE_MATCHER.format(
         report["version"], report["patches"])
 
-    # TODO: need to use the git_describe_v field here as well.
-    if not re.match(pattern, result["git_describe"]):
-        log.debug("Git describe version does not match '%s'", pattern)
+    git_describe = \
+        result.get("git_describe_v", None) or result.get("git_describe", None)
+
+    if any([not git_describe, not re.match(pattern, git_describe)]):
+        log.debug(
+            "Git describe version does not match '%s', or no git "
+            "describe value", pattern
+        )
         is_valid = False
 
     return is_valid
@@ -128,6 +163,9 @@ def handle_result(response, report, database, options):
 
             if valid_result:
                 response = send_report(valid_result, report, options)
+                if any([response.status_code == 202,
+                        response.status_code == 200]):
+                    _delete_report()
             else:
                 # We couldn't find a valid result from the API.
                 # Let's check again later.
@@ -136,6 +174,7 @@ def handle_result(response, report, database, options):
                     "No valid results found from the backend for %s-%s",
                     report["tree"], report["version"])
         else:
+            log.warn("No results found yet, checking again later")
             _inc_retries()
     elif response.status_code == 503:
         log.warn("Backend is in maintenance, will retry later")
@@ -152,7 +191,7 @@ def handle_result(response, report, database, options):
 
 
 def check_and_send(options):
-    """
+    """Check the queue and in case send the build/boot report.
 
     :param options: The app configuration parameters.
     :type options: dict
@@ -166,20 +205,24 @@ def check_and_send(options):
         utils.backend.req.headers.update(
             {"Authorization": options.get(utils.BACKEND_TOKEN, None)})
 
-        url = options[utils.BACKEND_URL] + "/job"
+        url = options[utils.BACKEND_URL]
+        if url[-1] == "/":
+            url += "job"
+        else:
+            url += "/job"
 
         for report in queued_reports:
-            if report.get("retires", 0) >= options[utils.MAX_RETRIES]:
+            report_get = report.get
+            if report_get("retries", 0) >= options[utils.MAX_RETRIES]:
                 log.warn(
                     "Too many retries for '%s - %s', report will be discarded",
-                    report["tree"], report["version"])
+                    report_get("tree"), report_get("version"))
                 database[utils.db.DB_CHECK_QUEUE].delete_one(
-                    {"_id": report["_id"]})
+                    {"_id": report_get("_id")})
             else:
                 params = [
-                    ("job", "stable-queue"),
-                    # ("job", report["tree"]),
-                    ("kernel_version", report["version"])
+                    ("job", report_get("tree")),
+                    ("kernel_version", report_get("version"))
                 ]
                 response = utils.backend.get(url, params)
                 handle_result(response, report, database, options)
