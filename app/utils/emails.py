@@ -90,8 +90,13 @@ def extract_kernel_version(subject):
 
             version = fix_kernel_version(matched.group("version"))
 
+            tree = matched.group("tree")
+            # TODO: extract this and read translation from a file maybe?
+            if tree == "stable":
+                tree = "stable-queue"
+
             extracted = {
-                "tree": matched.group("tree"),
+                "tree": tree,
                 "version": version,
                 "patches": patches
             }
@@ -106,30 +111,33 @@ def parse(message):
     :type message: str
     :return dict A dictionary with all the necessary data.
     """
-    # TODO: check for custom headers.
-    # TODO: check presence of In-Reply-To & References headers?
     mail = email.message_from_bytes(message[0][1])
-    subject = mail["Subject"]
+    email_data = None
 
-    log.debug("Received email with subject: %s", subject)
-    email_data = extract_kernel_version(subject)
-    if email_data:
-        log.info("New valid email found: %s", subject)
+    # TODO: check for custom headers
+    # (if we are going to define and use them)
+    if not all([mail["In-Reply-To"], mail["References"]]):
+        subject = mail["Subject"]
 
-        to = mail["To"]
-        cc = mail["Cc"]
+        log.debug("Received email with subject: %s", subject)
+        email_data = extract_kernel_version(subject)
+        if email_data:
+            log.info("New valid email found: %s", subject)
 
-        if to:
-            to = [x.strip() for x in to.split(",")]
-        if cc:
-            cc = [x.strip() for x in cc.split(",")]
+            to = mail["To"]
+            cc = mail["Cc"]
 
-        email_data["subject"] = subject
-        email_data["message_id"] = mail["Message-Id"]
-        email_data["to"] = to
-        email_data["cc"] = cc
-        email_data["from"] = email.utils.parseaddr(mail["From"])
+            if to:
+                to = [x.strip() for x in to.split(",")]
+            if cc:
+                cc = [x.strip() for x in cc.split(",")]
 
-        log.debug("Extracted data: %s", email_data)
+            email_data["subject"] = subject
+            email_data["message_id"] = mail["Message-Id"]
+            email_data["to"] = to
+            email_data["cc"] = cc
+            email_data["from"] = email.utils.parseaddr(mail["From"])
+
+            log.debug("Extracted data: %s", email_data)
 
     return email_data
