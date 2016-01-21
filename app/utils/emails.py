@@ -14,7 +14,9 @@
 """Email parsing logic."""
 
 import email
+import io
 import logging
+import os
 import re
 
 # pylint: disable=invalid-name
@@ -67,7 +69,7 @@ def fix_kernel_version(version):
     return version
 
 
-def extract_kernel_version(subject):
+def extract_kernel_from_subject(subject):
     """Extract the kernel version and patches info from the subject.
 
     Parse the subject string looking for a pre-defined structure. Then extract
@@ -104,15 +106,13 @@ def extract_kernel_version(subject):
     return extracted
 
 
-def parse(message):
-    """Parse a single email message and trigger the (possible) report.
+def extract_mail_values(mail):
+    """Extract the necessary values from the mail.
 
-    :param message: The email message from the server.
-    :type message: str
-    :return dict A dictionary with all the necessary data.
+    :param mail: The email message.
+    :return dict The email data as a dictionary.
     """
-    mail = email.message_from_bytes(message[0][1])
-    email_data = None
+    data = None
 
     # TODO: check for custom headers
     # (if we are going to define and use them)
@@ -120,8 +120,8 @@ def parse(message):
         subject = mail["Subject"]
 
         log.debug("Received email with subject: %s", subject)
-        email_data = extract_kernel_version(subject)
-        if email_data:
+        data = extract_kernel_from_subject(subject)
+        if data:
             log.info("New valid email found: %s", subject)
 
             to = mail["To"]
@@ -132,12 +132,49 @@ def parse(message):
             if cc:
                 cc = [x.strip() for x in cc.split(",")]
 
-            email_data["subject"] = subject
-            email_data["message_id"] = mail["Message-Id"]
-            email_data["to"] = to
-            email_data["cc"] = cc
-            email_data["from"] = email.utils.parseaddr(mail["From"])
+            data["subject"] = subject
+            data["message_id"] = mail["Message-Id"]
+            data["to"] = to
+            data["cc"] = cc
+            data["from"] = email.utils.parseaddr(mail["From"])
 
-            log.debug("Extracted data: %s", email_data)
+            log.debug("Extracted data: %s", data)
 
-    return email_data
+    return data
+
+
+def parse_from_file(path):
+    """Parse a single message from a file.
+
+    :param path: The full path the the email file.
+    :type path: str
+    :return dict A dictionary with all the necessary data.
+    """
+    data = None
+
+    # Although we don't write anything into the file, we need to make
+    # sure we can remove it.
+    if os.access(path, os.R_OK | os.W_OK):
+        with io.open(path, mode="rb") as read_file:
+            mail = email.message_from_binary_file(read_file)
+
+        data = extract_mail_values(mail)
+
+        try:
+            os.unlink(path)
+        except PermissionError:
+            log.error("Error removing file at '%s'", path)
+    else:
+        log.warn("Cannot access in 'rw' mode the file at '%s'", path)
+
+    return data
+
+
+def parse(message):
+    """Parse a single email message.
+
+    :param message: The email message from the IMAP server.
+    :type message: str
+    :return dict A dictionary with all the necessary data.
+    """
+    return extract_mail_values(email.message_from_bytes(message[0][1]))

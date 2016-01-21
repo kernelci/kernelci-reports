@@ -51,18 +51,18 @@ class TestEmails(unittest.TestCase):
         }
 
         subject = "[PATCH 4.1 00/45] 4.1.15-stable review"
-        returned_value = utils.emails.extract_kernel_version(subject)
+        returned_value = utils.emails.extract_kernel_from_subject(subject)
 
         self.assertDictEqual(expected, returned_value)
 
     def test_extract_kernel_version_reply(self):
         subject = "Re: [PATCH 4.1 00/45] 4.1.15-stable review"
-        returned_value = utils.emails.extract_kernel_version(subject)
+        returned_value = utils.emails.extract_kernel_from_subject(subject)
 
         self.assertIsNone(returned_value)
 
     def test_extract_kernel_version_random(self):
         subject = "foo review 4.1.5 bar kernel"
-        returned_value = utils.emails.extract_kernel_version(subject)
+        returned_value = utils.emails.extract_kernel_from_subject(subject)
 
         self.assertIsNone(returned_value)

@@ -15,8 +15,9 @@
 
 import imaplib
 import logging
-import sys
+import os
 import pymongo
+import sys
 
 import utils
 import utils.db
@@ -24,6 +25,8 @@ import utils.emails
 
 # pylint: disable=invalid-name
 log = logging.getLogger("kernelci-reports")
+
+DEFAULT_MAIL_FOLDER = "/var/lib/kernelci-reports"
 
 
 def ensure_indexes(options):
@@ -93,7 +96,7 @@ def save(options, data):
             connection.close()
 
 
-def check(options):
+def check_from_server(options):
     """Check for new emails via IMAP protocol.
 
     Will only check the default 'INBOX' mail box.
@@ -102,11 +105,9 @@ def check(options):
     :type options: dict
     :return list A list with the parsed emails data.
     """
-    log.debug("Checking emails...")
+    log.info("Checking emails from the server...")
 
     try:
-        log.debug("Connecting to mail server...")
-
         parsed_emails = []
         server = imaplib.IMAP4_SSL(
             host=options[utils.MAIL_SERVER],
@@ -137,3 +138,42 @@ def check(options):
     except imaplib.IMAP4.error:
         log.error("Error connecting to IMAP server, aborting.")
         sys.exit(1)
+
+
+def check_from_system():
+    """Check if there are email files and read them.
+
+    :return list A list with the parsed emails data.
+    """
+    parsed_emails = []
+
+    log.info("Checking for emails from file...")
+
+    if os.path.isdir(DEFAULT_MAIL_FOLDER):
+        for entry in os.listdir(DEFAULT_MAIL_FOLDER):
+            path = os.path.join(DEFAULT_MAIL_FOLDER, entry)
+            if all([not entry.startswith("."), os.path.isfile(path)]):
+                log.info("Parsing email from file %s", path)
+
+                data = utils.emails.parse_from_file(path)
+                if data:
+                    parsed_emails.append(data)
+
+    return parsed_emails
+
+
+def check(options):
+    """Check for new emails through the mail server and on the filesystem.
+
+    :param options: The configuration options.
+    :type options: dict
+    :return list A list with the parsed emails data.
+    """
+    log.debug("Checking emails...")
+
+    parsed_emails = []
+
+    parsed_emails.extend(check_from_system())
+    parsed_emails.extend(check_from_server(options))
+
+    return parsed_emails
