@@ -27,9 +27,6 @@ import reports.get
 DEFAULT_IMAP_SERVER = "imap.gmail.com"
 DEFAULT_IMAP_PORT = 993
 
-# Check emails every 15 minutes by default.
-DEFAULT_SLEEP = 900.0
-
 # pylint: disable=invalid-name
 # Setup logging here, and by default set INFO level.
 log = logging.getLogger("kernelci-reports")
@@ -102,7 +99,7 @@ def setup_args():
     parser.add_argument(
         "--check-every",
         type=float,
-        default=DEFAULT_SLEEP,
+        default=900.0,
         dest=utils.CHECK_EVERY,
         help="Number of seconds to wait for each check")
     parser.add_argument(

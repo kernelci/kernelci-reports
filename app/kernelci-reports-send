@@ -71,13 +71,13 @@ def setup_args():
     parser.add_argument(
         "--check-every",
         type=float,
-        default=900.0,
+        default=1200.0,
         dest=utils.CHECK_EVERY,
         help="Number of seconds to wait for each check")
     parser.add_argument(
         "--max-retries",
         type=int,
-        default=6,
+        default=10,
         dest=utils.MAX_RETRIES,
         help="How many times to check for each single report")
     parser.add_argument(
