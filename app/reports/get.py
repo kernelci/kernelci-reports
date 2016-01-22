@@ -187,7 +187,7 @@ def process(options, event):
     :param event: The even object used to synchronize.
     :type event: threading.Event
     """
-    if not event.is_set():
+    if event.is_set():
         try:
             event.clear()
             save(options, check(options))
