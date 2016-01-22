@@ -67,7 +67,7 @@ def send_report(result, report, options):
     # TODO: need a way to customize some of these values.
     data = {
         "delay": SEND_DELAY,
-        "build_report": 1,
+        "boot_report": 1,
         "job": result["job"],
         "kernel": result["kernel"],
         "format": ["txt"],
