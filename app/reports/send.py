@@ -240,9 +240,9 @@ def process(options, event):
     """
     if not event.is_set():
         try:
-            event.set()
+            event.clear()
             check_and_send(options)
         finally:
-            event.clear()
+            event.set()
     else:
         log.warn("Cannot send reports, other thread is blocking")

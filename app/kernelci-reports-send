@@ -165,7 +165,7 @@ if __name__ == "__main__":
         log.debug("Received signal %d", signum)
         log.info("Terminating all operations...")
         if event is not None:
-            event.wait()
+            event.wait(timeout=5.0)
         sys.exit(0)
 
     signal.signal(signal.SIGTERM, sig_handler)
@@ -176,9 +176,6 @@ if __name__ == "__main__":
 
         while True:
             event = threading.Event()
-            # Make sure it's clear for real.
-            event.clear()
-
             thread = threading.Thread(
                 target=reports.send.process, args=(options, event))
             thread.start()

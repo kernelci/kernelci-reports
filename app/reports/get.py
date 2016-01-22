@@ -189,9 +189,9 @@ def process(options, event):
     """
     if not event.is_set():
         try:
-            event.set()
+            event.clear()
             save(options, check(options))
         finally:
-            event.clear()
+            event.set()
     else:
         log.warn("Cannot check emails, other thread is blocking")
