@@ -177,3 +177,21 @@ def check(options):
     parsed_emails.extend(check_from_server(options))
 
     return parsed_emails
+
+
+def process(options, event):
+    """Execute the operations inside the event protected zone.
+
+    :param options: The app configuration parameters.
+    :type options: dict
+    :param event: The even object used to synchronize.
+    :type event: threading.Event
+    """
+    if not event.is_set():
+        try:
+            event.set()
+            save(options, check(options))
+        finally:
+            event.clear()
+    else:
+        log.warn("Cannot check emails, other thread is blocking")

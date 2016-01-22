@@ -17,7 +17,9 @@ import argparse
 import configparser
 import logging
 import os
+import signal
 import sys
+import threading
 import time
 
 import utils
@@ -143,6 +145,9 @@ def parse_config_file():
 
 
 if __name__ == "__main__":
+    event = None
+    thread = None
+
     options = setup_args()
     config = parse_config_file()
 
@@ -155,11 +160,30 @@ if __name__ == "__main__":
         console_handler.setLevel(logging.DEBUG)
         log.setLevel(logging.DEBUG)
 
+    def sig_handler(signum, fname):
+        """Handle TERM and QUIT signals."""
+        log.debug("Received signal %d", signum)
+        log.info("Terminating all operations...")
+        if event is not None:
+            event.wait()
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, sig_handler)
+    signal.signal(signal.SIGQUIT, sig_handler)
+
     try:
         log.info("Starting reports triggering system")
 
         while True:
-            reports.send.check_and_send(options)
+            event = threading.Event()
+            # Make sure it's clear for real.
+            event.clear()
+
+            thread = threading.Thread(
+                target=reports.send.process, args=(options, event))
+            thread.start()
+            thread.join()
+
             log.debug("Sleeping for %s seconds...", options[utils.CHECK_EVERY])
             time.sleep(float(options[utils.CHECK_EVERY]))
     except KeyboardInterrupt:

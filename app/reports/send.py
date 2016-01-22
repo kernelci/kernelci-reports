@@ -228,3 +228,21 @@ def check_and_send(options):
                 handle_result(response, report, database, options)
     finally:
         connection.close()
+
+
+def process(options, event):
+    """Execute the operations inside the event protected zone.
+
+    :param options: The app configuration parameters.
+    :type options: dict
+    :param event: The even object used to synchronize.
+    :type event: threading.Event
+    """
+    if not event.is_set():
+        try:
+            event.set()
+            check_and_send(options)
+        finally:
+            event.clear()
+    else:
+        log.warn("Cannot send reports, other thread is blocking")
