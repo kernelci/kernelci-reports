@@ -52,11 +52,19 @@ def fix_kernel_version(version):
 
     # Do the "conversion" only if we have some valid values: meaning that we
     # have something when we split the provided version string.
-    if len(version) >= 2:
+    v_len = len(version)
+    if v_len >= 2:
         try:
             # XXX: What should happen if we have a 4.0 kernel version?
             if version[-1] != "0":
-                version[-1] = str(int(version[-1]) - 1)
+                minor = int(version[-1]) - 1
+                if minor == 0:
+                    if v_len > 2:
+                        version = version[:-1]
+                    else:
+                        version[-1] = str(minor)
+                else:
+                    version[-1] = str(minor)
             else:
                 log.warn("Kernel version has a 0, don't know how to proceed")
         except ValueError:

@@ -43,9 +43,17 @@ class TestEmails(unittest.TestCase):
         returned_value = utils.emails.fix_kernel_version("4.1.3-foo")
         self.assertEqual("4.1.3-foo", returned_value)
 
+    def test_fix_kernel_version_with_minor_one_len_three(self):
+        returned_value = utils.emails.fix_kernel_version("4.1.1")
+        self.assertEqual("4.1", returned_value)
+
+    def test_fix_kernel_version_with_minor_one_len_two(self):
+        returned_value = utils.emails.fix_kernel_version("4.1")
+        self.assertEqual("4.0", returned_value)
+
     def test_extract_kernel_version_correct(self):
         expected = {
-            "tree": "stable",
+            "tree": "stable-queue",
             "patches": "45",
             "version": "4.1.14"
         }
