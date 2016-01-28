@@ -24,7 +24,7 @@ import utils.db
 log = logging.getLogger("kernelci-reports")
 
 # Seconds to wait before the backend should send the email report.
-SEND_DELAY = 5
+SEND_DELAY = 60
 # TODO: need a better check for different git_describe format.
 GIT_DESCRIBE_MATCHER = r"^v{0:s}-{1:s}-g(.*)"
 # Format string to re-build to from email address.
@@ -33,22 +33,45 @@ FROM_ADR_FMT = "{0:s} <{1:s}>"
 REPLY_FMT = "Re: {0:s}"
 
 
-def send_report(result, report, options):
+def _add_api_endpoint(url, endpoint):
+    """Check if the URL contains the trailing / and add the endpoit."""
+    if url[-1] != "/":
+        url += "/"
+    return url + endpoint
+
+
+def check_boots(result, options):
+    """Verify there are boot reports in the backend.
+
+    :param result: The result of the job from the backend.
+    :type result: dict
+    :param options: The app configuration parameters.
+    :type options: dict
+    :return A Response object.
+    """
+    log.debug("Checking boot results")
+    r_get = result.get
+    url = _add_api_endpoint(options[utils.BACKEND_URL], "count/boot")
+
+    param = [("job", r_get("job")), ("kernel", r_get("kernel"))]
+
+    return utils.backend.get(url, param)
+
+
+def send_report(result, report, delay, options):
     """Trigger the backend to send a report.
 
     :param result: The result from the backend API.
     :type result: dict
     :param report: The report as parsed from the email.
     :type report: dict
+    :param delay: Delay ins seconds to send the report.
+    :type delay: int
     :param options: The app configuration parameters.
     :type options: dict
+    :return A Response object.
     """
-    url = options[utils.BACKEND_URL]
-    if url[-1] == "/":
-        url += "send"
-    else:
-        url += "/send"
-
+    url = _add_api_endpoint(options[utils.BACKEND_URL], "send")
     report_get = report.get
 
     send_to = []
@@ -66,7 +89,7 @@ def send_report(result, report, options):
 
     # TODO: need a way to customize some of these values.
     data = {
-        "delay": SEND_DELAY,
+        "delay": delay,
         "boot_report": 1,
         "job": result["job"],
         "kernel": result["kernel"],
@@ -157,8 +180,6 @@ def handle_result(response, report, database, options):
     if response.status_code == 200:
         response = response.json()
 
-        # TODO:
-        # Need to check if we have boot reports, and maybe how many as well...
         if response["count"] > 0:
             response = response["result"]
             valid_result = None
@@ -169,45 +190,55 @@ def handle_result(response, report, database, options):
                     break
 
             if valid_result:
+                log.info(
+                    "Found valid job from backend: %s - %s",
+                    valid_result["job"], valid_result["kernel"])
+
                 status = valid_result["status"]
                 if status == "PASS":
-                    response = send_report(valid_result, report, options)
-                    if any([response.status_code == 202,
-                            response.status_code == 200]):
-                        _delete_report()
+                    response = check_boots(valid_result, options)
+
+                    if response.status_code == 200:
+                        result = response.json()["result"][0]
+
+                        if int(result["count"]) == 0:
+                            log.info("No boot results, schedule in 3 hours")
+                            delay = 10800
+                        else:
+                            delay = SEND_DELAY
+
+                        response = send_report(
+                            valid_result, report, delay, options)
+                        if any([response.status_code == 202,
+                                response.status_code == 200]):
+                            _delete_report()
+                    else:
+                        log.error("Error checking boot results from backend")
                 elif status == "BUILD":
                     if report.get("retries", 0) > 0:
                         _reset_retries()
-                    log.info(
-                        "Job '%s-%s' still building, checking again later",
-                        report["tree"], report["version"])
-                else:
+                    log.info("Job still building, retrying later")
+                elif status == "FAIL":
                     _delete_report()
-                    log.info(
-                        "Job '%s-%s' failed, will not send report",
-                        report["tree"], report["version"])
+                    log.info("Job failed, will not send report")
             else:
                 # We couldn't find a valid result from the API.
-                # Let's check again later.
                 _inc_retries()
                 log.info(
-                    "No valid results found from the backend for '%s-%s'",
-                    report["tree"], report["version"])
+                    "No valid results found from the backend, retrying later")
         else:
-            log.warn("No results found yet, checking again later")
             _inc_retries()
+            log.warn("No results found yet, retrying later")
     elif response.status_code == 503:
-        log.warn("Backend is in maintenance, will retry later")
+        log.warn("Backend is in maintenance, retrying later")
     elif response.status_code == 404:
-        log.error(
-            "Requested resource (%s, %s) not found, report will be discarded",
-            report["tree"], report["version"])
+        log.error("Resource not found, report will be discarded")
         _delete_report()
     elif response.status_code == 400:
         log.error("Something wrong in the request, report will be discarded")
         _delete_report()
     elif response.status_code == 500:
-        log.warn("Backend error, will retry later")
+        log.warn("Backend error, retrying later")
 
 
 def check_and_send(options):
@@ -225,24 +256,23 @@ def check_and_send(options):
         utils.backend.req.headers.update(
             {"Authorization": options.get(utils.BACKEND_TOKEN, None)})
 
-        url = options[utils.BACKEND_URL]
-        if url[-1] == "/":
-            url += "job"
-        else:
-            url += "/job"
+        url = _add_api_endpoint(options[utils.BACKEND_URL], "job")
 
         for report in queued_reports:
-            report_get = report.get
-            if report_get("retries", 0) >= options[utils.MAX_RETRIES]:
-                log.warn(
-                    "Too many retries for '%s - %s', report will be discarded",
-                    report_get("tree"), report_get("version"))
+            r_get = report.get
+            tree = r_get("tree")
+            version = r_get("version")
+
+            log.info(
+                "Working on: %s - %s / %s", tree, version, r_get("patches"))
+            if r_get("retries", 0) >= options[utils.MAX_RETRIES]:
+                log.warn("Too many retries, report will be discarded")
                 database[utils.db.DB_CHECK_QUEUE].delete_one(
-                    {"_id": report_get("_id")})
+                    {"_id": r_get("_id")})
             else:
                 params = [
-                    ("job", report_get("tree")),
-                    ("kernel_version", report_get("version"))
+                    ("job", tree),
+                    ("kernel_version", version)
                 ]
                 response = utils.backend.get(url, params)
                 handle_result(response, report, database, options)
