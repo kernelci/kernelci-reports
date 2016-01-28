@@ -140,6 +140,11 @@ def handle_result(response, report, database, options):
     :param database: The database connection.
     :param options: The app configuration parameters.
     """
+    def _reset_retries():
+        """Reset the retries field of the report to zero."""
+        database[utils.db.DB_CHECK_QUEUE].find_one_and_update(
+            {"_id": report["_id"]}, {"$set": {"retries": 0}})
+
     def _inc_retries():
         """Increment the retries field of the report."""
         database[utils.db.DB_CHECK_QUEUE].find_one_and_update(
@@ -152,6 +157,8 @@ def handle_result(response, report, database, options):
     if response.status_code == 200:
         response = response.json()
 
+        # TODO:
+        # Need to check if we have boot reports, and maybe how many as well...
         if response["count"] > 0:
             response = response["result"]
             valid_result = None
@@ -162,16 +169,29 @@ def handle_result(response, report, database, options):
                     break
 
             if valid_result:
-                response = send_report(valid_result, report, options)
-                if any([response.status_code == 202,
-                        response.status_code == 200]):
+                status = valid_result["status"]
+                if status == "PASS":
+                    response = send_report(valid_result, report, options)
+                    if any([response.status_code == 202,
+                            response.status_code == 200]):
+                        _delete_report()
+                elif status == "BUILD":
+                    if report.get("retries", 0) > 0:
+                        _reset_retries()
+                    log.info(
+                        "Job '%s-%s' still building, checking again later",
+                        report["tree"], report["version"])
+                else:
                     _delete_report()
+                    log.info(
+                        "Job '%s-%s' failed, will not send report",
+                        report["tree"], report["version"])
             else:
                 # We couldn't find a valid result from the API.
                 # Let's check again later.
                 _inc_retries()
                 log.info(
-                    "No valid results found from the backend for %s-%s",
+                    "No valid results found from the backend for '%s-%s'",
                     report["tree"], report["version"])
         else:
             log.warn("No results found yet, checking again later")
