@@ -176,7 +176,7 @@ def check(options):
     parsed_emails = []
 
     parsed_emails.extend(check_from_system())
-    # parsed_emails.extend(check_from_server(options))
+    parsed_emails.extend(check_from_server(options))
 
     return parsed_emails
 
