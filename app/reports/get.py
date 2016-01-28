@@ -65,29 +65,31 @@ def save(options, data):
     """
     if data:
         try:
-            log.debug("Saving parsed emails...")
+            log.debug("Saving parsed emails")
             connection = utils.db.get_connection(options)
             database = connection[utils.db.DB_NAME]
 
             if database:
                 for message in data:
+                    msg_id = message["message_id"]
+                    subject = message["subject"]
+
                     prev_doc = database[utils.db.DB_CHECK_QUEUE].find_one(
-                        {
-                            "message_id": message["message_id"],
-                            "subject": message["subject"]
-                        },
+                        {"message_id": msg_id, "subject": subject},
                         projection={
                             "_id": False, "message_id": True, "subject": True}
                     )
 
                     if not prev_doc:
-                        log.debug("No similar document found, saving...")
+                        log.debug(
+                            "Saving report with Message-Id '%s': '%s'",
+                            msg_id, subject)
                         database[utils.db.DB_CHECK_QUEUE].insert_many(
                             data, ordered=False)
                     else:
-                        log.warn(
-                            "Similar message found with Message-Id '%s'",
-                            message["message_id"])
+                        log.info(
+                            "Similar report found with Message-Id '%s': %s",
+                            msg_id, subject)
             else:
                 log.error(
                     "No database connection found, parsed data will be lost")
@@ -105,7 +107,7 @@ def check_from_server(options):
     :type options: dict
     :return list A list with the parsed emails data.
     """
-    log.info("Checking emails from the server...")
+    log.info("Checking emails from server")
 
     try:
         parsed_emails = []
@@ -147,7 +149,7 @@ def check_from_system():
     """
     parsed_emails = []
 
-    log.info("Checking for emails from file...")
+    log.info("Checking emails from local directory")
 
     if os.path.isdir(DEFAULT_MAIL_FOLDER):
         for entry in os.listdir(DEFAULT_MAIL_FOLDER):
@@ -174,7 +176,7 @@ def check(options):
     parsed_emails = []
 
     parsed_emails.extend(check_from_system())
-    parsed_emails.extend(check_from_server(options))
+    # parsed_emails.extend(check_from_server(options))
 
     return parsed_emails
 
