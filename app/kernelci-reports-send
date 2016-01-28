@@ -79,7 +79,7 @@ def setup_args():
     parser.add_argument(
         "--max-retries",
         type=int,
-        default=10,
+        default=15,
         dest=utils.MAX_RETRIES,
         help="How many times to check for each single report")
     parser.add_argument(
