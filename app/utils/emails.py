@@ -58,11 +58,9 @@ def fix_kernel_version(version):
             # XXX: What should happen if we have a 4.0 kernel version?
             if version[-1] != "0":
                 minor = int(version[-1]) - 1
-                if minor == 0:
-                    if v_len > 2:
-                        version = version[:-1]
-                    else:
-                        version[-1] = str(minor)
+                # If we receive the string 4.1.1, it will become just 4.1.
+                if all([minor == 0, v_len > 2]):
+                    version = version[:-1]
                 else:
                     version[-1] = str(minor)
             else:
