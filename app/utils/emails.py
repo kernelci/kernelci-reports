@@ -13,11 +13,14 @@
 
 """Email parsing logic."""
 
+import datetime
 import email
 import io
 import logging
 import os
 import re
+
+from bson import tz_util
 
 # pylint: disable=invalid-name
 log = logging.getLogger("kernelci-reports")
@@ -127,6 +130,8 @@ def extract_mail_values(mail):
 
         log.debug("Received email with subject: %s", subject)
         data = extract_kernel_from_subject(subject)
+        # TODO: check custom headers for tree/version/patches...
+        # TODO: define custom headers for tree/version/patches...
         if data:
             log.info("New valid email found: %s", subject)
 
@@ -143,6 +148,17 @@ def extract_mail_values(mail):
             data["to"] = to
             data["cc"] = cc
             data["from"] = email.utils.parseaddr(mail["From"])
+
+            # TODO: make sure date is UTC.
+            data["created_on"] = mail["Date"]
+
+            # When is the last moment for sending the report?
+            deadline = mail["X-KernelTest-Deadline"]
+            if not deadline:
+                deadline = (
+                    datetime.datetime.now(tz=tz_util.utc) +
+                    datetime.timedelta(days=2))
+            data["deadline"] = deadline
 
             log.debug("Extracted data: %s", data)
 
