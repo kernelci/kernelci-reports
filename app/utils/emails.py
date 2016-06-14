@@ -15,12 +15,11 @@
 
 import datetime
 import email
+import email.utils
 import io
 import logging
 import os
 import re
-
-from bson import tz_util
 
 # pylint: disable=invalid-name
 log = logging.getLogger("kernelci-reports")
@@ -37,8 +36,11 @@ SUBJECT_PATCH_RGX = re.compile(
 # Is the message a reply?
 SUBJECT_RE_RGX = re.compile(r"^Re:?")
 
-# TODO: define custom headers.
-CUSTOM_HEADERS = []
+DEADLINE_FORMATS = [
+    r"%Y%m%dT%H%M%S.%f%z",
+    r"%Y%m%dT%H%M%S%z",
+    r"%Y%m%dT%H%M%z"
+]
 
 
 def fix_kernel_version(version):
@@ -67,7 +69,8 @@ def fix_kernel_version(version):
                 else:
                     version[-1] = str(minor)
             else:
-                log.warn("Kernel version has a 0, don't know how to proceed")
+                log.warning(
+                    "Kernel version has a 0, don't know how to proceed")
         except ValueError:
             log.error("Got non parsable kernel version: %s", version)
         finally:
@@ -115,6 +118,30 @@ def extract_kernel_from_subject(subject):
     return extracted
 
 
+def parse_deadline_string(deadline):
+    """Parse the X-KernelTest-Deadline mail header and convert it to datetime.
+
+    :param deadline: The custom header value.
+    :type deadline: str
+    :return A datetime.datetime object with UTC timezone.
+    :rtype datetime.datetime
+    """
+    # Just replace two hypens because we need the one on the timezone.
+    deadline = deadline.replace("-", "", 2).replace(":", "")
+
+    parsed_deadline = None
+    for fmt in DEADLINE_FORMATS:
+        try:
+            parsed_deadline = datetime.datetime.strptime(deadline, fmt)
+        except ValueError:
+            log.error("Error parsing deadline '%s' with '%s'", deadline, fmt)
+        else:
+            parsed_deadline = parsed_deadline.astimezone(datetime.timezone.utc)
+            break
+
+    return parsed_deadline
+
+
 def extract_mail_values(mail):
     """Extract the necessary values from the mail.
 
@@ -123,15 +150,13 @@ def extract_mail_values(mail):
     """
     data = None
 
-    # TODO: check for custom headers
-    # (if we are going to define and use them)
     if not all([mail["In-Reply-To"], mail["References"]]):
         subject = mail["Subject"]
 
         log.debug("Received email with subject: %s", subject)
         data = extract_kernel_from_subject(subject)
-        # TODO: check custom headers for tree/version/patches...
-        # TODO: define custom headers for tree/version/patches...
+
+        # TODO: check custom headers for tree/version/patches (if defined).
         if data:
             log.info("New valid email found: %s", subject)
 
@@ -149,15 +174,23 @@ def extract_mail_values(mail):
             data["cc"] = cc
             data["from"] = email.utils.parseaddr(mail["From"])
 
-            # TODO: make sure date is UTC.
-            data["created_on"] = mail["Date"]
+            email_date = \
+                email.utils.parsedate_to_datetime(mail["Date"])
+            email_date = email_date.astimezone(datetime.timezone.utc)
+
+            log.debug("Email date: %s", email_date)
+
+            data["created_on"] = email_date
 
             # When is the last moment for sending the report?
             deadline = mail["X-KernelTest-Deadline"]
+            if deadline:
+                deadline = parse_deadline_string(deadline)
+
             if not deadline:
-                deadline = (
-                    datetime.datetime.now(tz=tz_util.utc) +
-                    datetime.timedelta(days=2))
+                log.warning("No deadline available, default to +2 days")
+                deadline = (email_date + datetime.timedelta(days=2))
+
             data["deadline"] = deadline
 
             log.debug("Extracted data: %s", data)
@@ -187,7 +220,7 @@ def parse_from_file(path):
         except PermissionError:
             log.error("Error removing file at '%s'", path)
     else:
-        log.warn("Cannot access in 'rw' mode the file at '%s'", path)
+        log.warning("Cannot access in 'rw' mode the file at '%s'", path)
 
     return data
 

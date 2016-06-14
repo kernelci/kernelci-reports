@@ -13,6 +13,7 @@
 
 """Email utilities test module."""
 
+import datetime
 import logging
 import unittest
 
@@ -74,3 +75,27 @@ class TestEmails(unittest.TestCase):
         returned_value = utils.emails.extract_kernel_from_subject(subject)
 
         self.assertIsNone(returned_value)
+
+    def test_extract_deadline_format_0(self):
+        deadline = "2016-06-13T11:30:00.000001+00:00"
+        returned_val = utils.emails.parse_deadline_string(deadline)
+
+        self.assertIsInstance(returned_val, datetime.datetime)
+
+    def test_extract_deadline_format_1(self):
+        deadline = "2016-06-13T11:30:00+00:00"
+        returned_val = utils.emails.parse_deadline_string(deadline)
+
+        self.assertIsInstance(returned_val, datetime.datetime)
+
+    def test_extract_deadline_format_2(self):
+        deadline = "2016-06-13T11:30-02:00"
+        returned_val = utils.emails.parse_deadline_string(deadline)
+
+        self.assertIsInstance(returned_val, datetime.datetime)
+
+    def test_extract_deadline_format_not_valid(self):
+        deadline = "2016-06-13T11:30:00"
+        returned_val = utils.emails.parse_deadline_string(deadline)
+
+        self.assertIsNone(returned_val)
