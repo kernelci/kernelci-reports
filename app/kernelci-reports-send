@@ -77,12 +77,6 @@ def setup_args():
         dest=utils.CHECK_EVERY,
         help="Number of seconds to wait for each check")
     parser.add_argument(
-        "--max-retries",
-        type=int,
-        default=15,
-        dest=utils.MAX_RETRIES,
-        help="How many times to check for each single report")
-    parser.add_argument(
         "--debug",
         dest=utils.DEBUG, action="store_true", help="Enable debug output")
 
