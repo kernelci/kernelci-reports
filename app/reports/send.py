@@ -13,6 +13,7 @@
 
 """Check the queue in the database and the API, send reports."""
 
+import datetime
 import logging
 import re
 
@@ -24,7 +25,7 @@ import utils.db
 log = logging.getLogger("kernelci-reports")
 
 # Seconds to wait before the backend should send the email report.
-SEND_DELAY = 60
+SEND_DELAY = 12600
 # TODO: need a better check for different git_describe format.
 GIT_DESCRIBE_MATCHER = r"^v{0:s}-{1:s}-g(.*)"
 # Format string to re-build to from email address.
@@ -58,15 +59,13 @@ def check_boots(result, options):
     return utils.backend.get(url, param)
 
 
-def send_report(result, report, delay, options):
+def send_report(result, report, options):
     """Trigger the backend to send a report.
 
     :param result: The result from the backend API.
     :type result: dict
     :param report: The report as parsed from the email.
     :type report: dict
-    :param delay: Delay ins seconds to send the report.
-    :type delay: int
     :param options: The app configuration parameters.
     :type options: dict
     :return A Response object.
@@ -89,7 +88,7 @@ def send_report(result, report, delay, options):
 
     # TODO: need a way to customize some of these values.
     data = {
-        "delay": delay,
+        "delay": SEND_DELAY,
         "boot_report": 1,
         "job": result["job"],
         "kernel": result["kernel"],
@@ -163,16 +162,6 @@ def handle_result(response, report, database, options):
     :param database: The database connection.
     :param options: The app configuration parameters.
     """
-    def _reset_retries():
-        """Reset the retries field of the report to zero."""
-        database[utils.db.DB_CHECK_QUEUE].find_one_and_update(
-            {"_id": report["_id"]}, {"$set": {"retries": 0}})
-
-    def _inc_retries():
-        """Increment the retries field of the report."""
-        database[utils.db.DB_CHECK_QUEUE].find_one_and_update(
-            {"_id": report["_id"]}, {"$inc": {"retries": 1}})
-
     def _delete_report():
         """Delete the report from the database."""
         database[utils.db.DB_CHECK_QUEUE].delete_one({"_id": report["_id"]})
@@ -201,39 +190,31 @@ def handle_result(response, report, database, options):
                     if response.status_code == 200:
                         result = response.json()["result"][0]
 
-                        if int(result["count"]) == 0:
-                            log.info("No boot results, schedule in 3 hours")
-                            delay = 10800
+                        # Check if we have the first boot reports in the
+                        # backend. If so, schedule the email reports for
+                        # later.
+                        if int(result["count"]) > 0:
+                            response = \
+                                send_report(valid_result, report, options)
+                            if any([response.status_code == 202,
+                                    response.status_code == 200]):
+                                _delete_report()
                         else:
-                            delay = SEND_DELAY
-
-                        response = send_report(
-                            valid_result, report, delay, options)
-                        if any([response.status_code == 202,
-                                response.status_code == 200]):
-                            _delete_report()
+                            log.info("No boot reports yet, retrying later")
                     else:
                         log.error("Error checking boot results from backend")
                 elif status == "BUILD":
-                    if report.get("retries", 0) > 0:
-                        _reset_retries()
                     log.info("Job still building, retrying later")
                 elif status == "FAIL":
                     _delete_report()
                     log.info("Job failed, will not send report")
             else:
-                # We couldn't find a valid result from the API.
-                _inc_retries()
                 log.info(
                     "No valid results found from the backend, retrying later")
         else:
-            _inc_retries()
             log.warn("No results found yet, retrying later")
     elif response.status_code == 503:
         log.warn("Backend is in maintenance, retrying later")
-    elif response.status_code == 404:
-        log.error("Resource not found, report will be discarded")
-        _delete_report()
     elif response.status_code == 400:
         log.error("Something wrong in the request, report will be discarded")
         _delete_report()
@@ -252,7 +233,9 @@ def check_and_send(options):
     try:
         database = connection[utils.db.DB_NAME]
 
-        queued_reports = database[utils.db.DB_CHECK_QUEUE].find()
+        queued_reports = \
+            database[utils.db.DB_CHECK_QUEUE].find(sort=[("created_on", 1)])
+
         utils.backend.req.headers.update(
             {"Authorization": options.get(utils.BACKEND_TOKEN, None)})
 
@@ -262,11 +245,20 @@ def check_and_send(options):
             r_get = report.get
             tree = r_get("tree")
             version = r_get("version")
+            deadline = r_get("deadline")
+
+            now = datetime.datetime.utcnow()
+            # Time when the scheduled report should be sent by the backend.
+            # If this value is bigger than deadline, no point in sending the
+            # report.
+            scheduled = now + datetime.timedelta(seconds=SEND_DELAY)
 
             log.info(
                 "Working on: %s - %s / %s", tree, version, r_get("patches"))
-            if r_get("retries", 0) >= options[utils.MAX_RETRIES]:
-                log.warn("Too many retries, report will be discarded")
+            if any([now >= deadline, scheduled >= deadline]):
+                log.info(
+                    "Removing mail request, past the deadline: %s - %s",
+                    deadline, scheduled)
                 database[utils.db.DB_CHECK_QUEUE].delete_one(
                     {"_id": r_get("_id")})
             else:
