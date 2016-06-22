@@ -99,3 +99,25 @@ class TestEmails(unittest.TestCase):
         returned_val = utils.emails.parse_deadline_string(deadline)
 
         self.assertIsNone(returned_val)
+
+    def test_extract_tree_name_no_match(self):
+        tree = "foo-bar"
+        extracted = utils.emails.extract_tree_name(tree)
+
+        self.assertEqual(tree, extracted)
+
+    def test_extract_tree_name_linux_stable(self):
+        tree = (
+            "git://git.kernel.org/pub/scm/linux/kernel/git/stable/"
+            "linux-stable-rc.git")
+        extracted = utils.emails.extract_tree_name(tree)
+
+        self.assertEqual("stable-rc", extracted)
+
+    def test_extract_tree_name_default(self):
+        tree = (
+            "git://git.kernel.org/pub/scm/linux/kernel/git/stable/"
+            "stable-queue.git")
+        extracted = utils.emails.extract_tree_name(tree)
+
+        self.assertEqual("stable-queue", extracted)
