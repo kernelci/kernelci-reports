@@ -17,6 +17,8 @@ import datetime
 import logging
 import unittest
 
+from email.mime.text import MIMEText
+
 import utils.emails
 
 
@@ -121,3 +123,28 @@ class TestEmails(unittest.TestCase):
         extracted = utils.emails.extract_tree_name(tree)
 
         self.assertEqual("stable-queue", extracted)
+
+    def test_extract_from_headers_correct(self):
+        mail = MIMEText("foo")
+        mail["X-KernelTest-Tree"] = (
+            "git://git.kernel.org/pub/scm/linux/kernel/git/stable/"
+            "linux-stable-rc.git")
+        mail["X-KernelTest-Branch"] = "linux-4.6.y"
+        mail["X-KernelTest-PatchCount"] = "47"
+        mail["X-KernelTest-Version"] = "4.6.2"
+
+        expected = {
+            "tree": "stable-rc",
+            "patches": "47",
+            "version": "4.6.1",
+            "branch": "local/linux-4.6.y"
+        }
+
+        extracted = utils.emails.extract_from_headers(mail)
+        self.assertDictEqual(expected, extracted)
+
+    def test_extract_from_headers_no_headers(self):
+        mail = MIMEText("foo")
+
+        extracted = utils.emails.extract_from_headers(mail)
+        self.assertDictEqual({}, extracted)
