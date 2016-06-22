@@ -51,6 +51,7 @@ X_GIT_BRANCH_HEADER = "X-KernelTest-Branch"
 X_KERNEL_VERSION_HEADER = "X-KernelTest-Branch"
 X_TREE_HEADER = "X-KernelTest-Tree"
 X_DEADLINE_HEDEAR = "X-KernelTest-Deadline"
+X_PATCHES_HEADER = "X-KernelTest-PatchCount"
 
 
 def fix_kernel_version(version):
@@ -113,13 +114,14 @@ def extract_from_headers(mail):
     """Extract the kerormations from mail headers.
 
     :param mail: The email to parse.
-    :return dict A dictionary.
+    :return dict A dictionary with tree, branch, version and patches.
     """
     extracted = {}
 
-    branch = mail[X_GIT_BRANCH_HEADER]
-    version = mail[X_KERNEL_VERSION_HEADER]
-    tree = mail[X_TREE_HEADER]
+    branch = mail[X_GIT_BRANCH_HEADER] or None
+    version = mail[X_KERNEL_VERSION_HEADER] or None
+    tree = mail[X_TREE_HEADER] or None
+    patches = mail[X_PATCHES_HEADER] or None
 
     if branch:
         # git_branch on our database is stored as "local/branch".
@@ -133,6 +135,9 @@ def extract_from_headers(mail):
 
     if tree:
         extracted["tree"] = extract_tree_name(tree)
+
+    if patches is not None:
+        extracted["patches"] = patches
 
     return extracted
 
@@ -212,7 +217,6 @@ def extract_mail_values(mail):
         if not SUBJECT_RE_RGX.match(subject):
             data = extract_from_headers(mail)
 
-            # TODO: still need to extract the number of patches.
             if not data:
                 data = extract_kernel_from_subject(subject)
 
@@ -242,7 +246,7 @@ def extract_mail_values(mail):
                 data["created_on"] = email_date
 
                 # When is the last moment for sending the report?
-                deadline = mail[X_DEADLINE_HEDEAR]
+                deadline = mail[X_DEADLINE_HEDEAR] or None
                 if deadline:
                     deadline = parse_deadline_string(deadline)
 
