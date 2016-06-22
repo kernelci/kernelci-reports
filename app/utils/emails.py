@@ -48,7 +48,7 @@ DEADLINE_FORMATS = [
 
 # Custom email headers.
 X_GIT_BRANCH_HEADER = "X-KernelTest-Branch"
-X_KERNEL_VERSION_HEADER = "X-KernelTest-Branch"
+X_KERNEL_VERSION_HEADER = "X-KernelTest-Version"
 X_TREE_HEADER = "X-KernelTest-Tree"
 X_DEADLINE_HEDEAR = "X-KernelTest-Deadline"
 X_PATCHES_HEADER = "X-KernelTest-PatchCount"
