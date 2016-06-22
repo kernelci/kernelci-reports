@@ -37,9 +37,9 @@ SUBJECT_PATCH_RGX = re.compile(
 SUBJECT_RE_RGX = re.compile(r"^Re:?")
 
 DEADLINE_FORMATS = [
-    r"%Y%m%dT%H%M%S.%f%z",
+    r"%Y%m%dT%H%M%z",
     r"%Y%m%dT%H%M%S%z",
-    r"%Y%m%dT%H%M%z"
+    r"%Y%m%dT%H%M%S.%f%z"
 ]
 
 
