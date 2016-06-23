@@ -39,6 +39,8 @@ SUBJECT_RE_RGX = re.compile(r"^Re:?")
 LOCAL_BRANCH_RGX = re.compile(r"^local/")
 # To extract the tree name from the mail header.
 TREE_RGX = re.compile(r"(?<=/)(?P<tree>[\w-]*(?=\.git))")
+# Is the kernel being tested a -rc one?
+RC_VERSION_RGX = re.compile(r"(?P<version>[0-9.]*(?=-rc[0-9]{1,}))")
 
 DEADLINE_FORMATS = [
     r"%Y%m%dT%H%M%z",
@@ -64,6 +66,11 @@ def fix_kernel_version(version):
     :type version: str
     :return str The updated kernel version.
     """
+    # Clean up the -rc[0-9] part.
+    matched = RC_VERSION_RGX.match(version)
+    if matched:
+        version = matched.group("version")
+
     version = version.split(".")
 
     # Do the "conversion" only if we have some valid values: meaning that we
@@ -110,6 +117,22 @@ def extract_tree_name(tree):
     return tree_name
 
 
+def extract_patches_from_subject(subject):
+    """Extract the patches count from the subject string.
+
+    :param subject: The email subject.
+    :type subject: str
+    :return str The patches count.
+    """
+    match = SUBJECT_PATCH_RGX.match(subject)
+    patches = None
+    if match:
+        patches = match.group("patches")
+        patches = patches.split("/")[1]
+
+    return patches
+
+
 def extract_from_headers(mail):
     """Extract the kerormations from mail headers.
 
@@ -117,6 +140,8 @@ def extract_from_headers(mail):
     :return dict A dictionary with tree, branch, version and patches.
     """
     extracted = {}
+
+    log.debug("Extracting values from custom headers")
 
     branch = mail[X_GIT_BRANCH_HEADER] or None
     version = mail[X_KERNEL_VERSION_HEADER] or None
@@ -142,7 +167,7 @@ def extract_from_headers(mail):
     return extracted
 
 
-def extract_kernel_from_subject(subject):
+def extract_from_subject(subject):
     """Extract the kernel version and patches info from the subject.
 
     Parse the subject string looking for a pre-defined structure. Then extract
@@ -194,7 +219,8 @@ def parse_deadline_string(deadline):
         try:
             parsed_deadline = datetime.datetime.strptime(deadline, fmt)
         except ValueError:
-            log.error("Error parsing deadline '%s' with '%s'", deadline, fmt)
+            # Silently ignore the error since we can try at max 3 times.
+            pass
         else:
             parsed_deadline = parsed_deadline.astimezone(datetime.timezone.utc)
             break
@@ -218,7 +244,15 @@ def extract_mail_values(mail):
             data = extract_from_headers(mail)
 
             if not data:
-                data = extract_kernel_from_subject(subject)
+                data = extract_from_subject(subject)
+
+            # If we still don't have the patches count, parse the subject
+            # and extract it from there.
+            if all([data, not data.get("patches")]):
+                log.debug("No patches found in the headers, parsing subject")
+                patches = extract_patches_from_subject(subject)
+                if patches:
+                    data["patches"] = patches
 
             if data:
                 log.info("New valid email found: %s", subject)

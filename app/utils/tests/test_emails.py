@@ -46,6 +46,14 @@ class TestEmails(unittest.TestCase):
         returned_value = utils.emails.fix_kernel_version("4.1.3-foo")
         self.assertEqual("4.1.3-foo", returned_value)
 
+    def test_fix_kernel_version_rc(self):
+        returned_value = utils.emails.fix_kernel_version("4.1.3-rc1")
+        self.assertEqual("4.1.2", returned_value)
+
+    def test_fix_kernel_version_rc_multi(self):
+        returned_value = utils.emails.fix_kernel_version("4.1.3-rc12")
+        self.assertEqual("4.1.2", returned_value)
+
     def test_fix_kernel_version_with_minor_one_len_three(self):
         returned_value = utils.emails.fix_kernel_version("4.1.1")
         self.assertEqual("4.1", returned_value)
@@ -62,19 +70,19 @@ class TestEmails(unittest.TestCase):
         }
 
         subject = "[PATCH 4.1 00/45] 4.1.15-stable review"
-        returned_value = utils.emails.extract_kernel_from_subject(subject)
+        returned_value = utils.emails.extract_from_subject(subject)
 
         self.assertDictEqual(expected, returned_value)
 
     def test_extract_kernel_version_reply(self):
         subject = "Re: [PATCH 4.1 00/45] 4.1.15-stable review"
-        returned_value = utils.emails.extract_kernel_from_subject(subject)
+        returned_value = utils.emails.extract_from_subject(subject)
 
         self.assertIsNone(returned_value)
 
     def test_extract_kernel_version_random(self):
         subject = "foo review 4.1.5 bar kernel"
-        returned_value = utils.emails.extract_kernel_from_subject(subject)
+        returned_value = utils.emails.extract_from_subject(subject)
 
         self.assertIsNone(returned_value)
 
