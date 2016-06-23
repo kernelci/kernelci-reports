@@ -17,6 +17,8 @@ import datetime
 import logging
 import unittest
 
+from email.mime.text import MIMEText
+
 import utils.emails
 
 
@@ -44,6 +46,14 @@ class TestEmails(unittest.TestCase):
         returned_value = utils.emails.fix_kernel_version("4.1.3-foo")
         self.assertEqual("4.1.3-foo", returned_value)
 
+    def test_fix_kernel_version_rc(self):
+        returned_value = utils.emails.fix_kernel_version("4.1.3-rc1")
+        self.assertEqual("4.1.2", returned_value)
+
+    def test_fix_kernel_version_rc_multi(self):
+        returned_value = utils.emails.fix_kernel_version("4.1.3-rc12")
+        self.assertEqual("4.1.2", returned_value)
+
     def test_fix_kernel_version_with_minor_one_len_three(self):
         returned_value = utils.emails.fix_kernel_version("4.1.1")
         self.assertEqual("4.1", returned_value)
@@ -60,19 +70,19 @@ class TestEmails(unittest.TestCase):
         }
 
         subject = "[PATCH 4.1 00/45] 4.1.15-stable review"
-        returned_value = utils.emails.extract_kernel_from_subject(subject)
+        returned_value = utils.emails.extract_from_subject(subject)
 
         self.assertDictEqual(expected, returned_value)
 
     def test_extract_kernel_version_reply(self):
         subject = "Re: [PATCH 4.1 00/45] 4.1.15-stable review"
-        returned_value = utils.emails.extract_kernel_from_subject(subject)
+        returned_value = utils.emails.extract_from_subject(subject)
 
         self.assertIsNone(returned_value)
 
     def test_extract_kernel_version_random(self):
         subject = "foo review 4.1.5 bar kernel"
-        returned_value = utils.emails.extract_kernel_from_subject(subject)
+        returned_value = utils.emails.extract_from_subject(subject)
 
         self.assertIsNone(returned_value)
 
@@ -99,3 +109,50 @@ class TestEmails(unittest.TestCase):
         returned_val = utils.emails.parse_deadline_string(deadline)
 
         self.assertIsNone(returned_val)
+
+    def test_extract_tree_name_no_match(self):
+        tree = "foo-bar"
+        extracted = utils.emails.extract_tree_name(tree)
+
+        self.assertEqual(tree, extracted)
+
+    def test_extract_tree_name_linux_stable(self):
+        tree = (
+            "git://git.kernel.org/pub/scm/linux/kernel/git/stable/"
+            "linux-stable-rc.git")
+        extracted = utils.emails.extract_tree_name(tree)
+
+        self.assertEqual("stable-rc", extracted)
+
+    def test_extract_tree_name_default(self):
+        tree = (
+            "git://git.kernel.org/pub/scm/linux/kernel/git/stable/"
+            "stable-queue.git")
+        extracted = utils.emails.extract_tree_name(tree)
+
+        self.assertEqual("stable-queue", extracted)
+
+    def test_extract_from_headers_correct(self):
+        mail = MIMEText("foo")
+        mail["X-KernelTest-Tree"] = (
+            "git://git.kernel.org/pub/scm/linux/kernel/git/stable/"
+            "linux-stable-rc.git")
+        mail["X-KernelTest-Branch"] = "linux-4.6.y"
+        mail["X-KernelTest-PatchCount"] = "47"
+        mail["X-KernelTest-Version"] = "4.6.2"
+
+        expected = {
+            "tree": "stable-rc",
+            "patches": "47",
+            "version": "4.6.1",
+            "branch": "local/linux-4.6.y"
+        }
+
+        extracted = utils.emails.extract_from_headers(mail)
+        self.assertDictEqual(expected, extracted)
+
+    def test_extract_from_headers_no_headers(self):
+        mail = MIMEText("foo")
+
+        extracted = utils.emails.extract_from_headers(mail)
+        self.assertDictEqual({}, extracted)
