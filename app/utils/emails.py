@@ -162,7 +162,7 @@ def extract_from_headers(mail):
         extracted["tree"] = extract_tree_name(tree)
 
     if patches is not None:
-        extracted["patches"] = patches
+        extracted["patches"] = str(patches)
 
     return extracted
 
@@ -197,7 +197,7 @@ def extract_from_subject(subject):
             extracted = {
                 "tree": tree,
                 "version": version,
-                "patches": patches
+                "patches": str(patches)
             }
 
     return extracted
@@ -252,7 +252,7 @@ def extract_mail_values(mail):
                 log.debug("No patches found in the headers, parsing subject")
                 patches = extract_patches_from_subject(subject)
                 if patches:
-                    data["patches"] = patches
+                    data["patches"] = str(patches)
 
             if data:
                 log.info("New valid email found: %s", subject)
