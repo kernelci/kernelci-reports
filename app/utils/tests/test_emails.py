@@ -65,7 +65,7 @@ class TestEmails(unittest.TestCase):
     def test_extract_kernel_version_correct(self):
         expected = {
             "tree": "stable-queue",
-            "patches": "45",
+            "patches": ["45", "46"],
             "version": "4.1.14"
         }
 
@@ -143,7 +143,7 @@ class TestEmails(unittest.TestCase):
 
         expected = {
             "tree": "stable-rc",
-            "patches": "47",
+            "patches": ["47", "48"],
             "version": "4.6.1",
             "branch": "local/linux-4.6.y"
         }
@@ -156,3 +156,6 @@ class TestEmails(unittest.TestCase):
 
         extracted = utils.emails.extract_from_headers(mail)
         self.assertDictEqual({}, extracted)
+
+    def test_hack_patches(self):
+        self.assertListEqual(["0", "1"], utils.emails.hack_patches_count(0))

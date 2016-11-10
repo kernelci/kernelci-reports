@@ -16,7 +16,8 @@
 import unittest
 
 TEST_MODULES = [
-    "utils.tests.test_emails"
+    "utils.tests.test_emails",
+    "reports.tests.test_send"
 ]
 
 

@@ -133,17 +133,29 @@ def is_valid_result(result, report):
     """
     is_valid = True
 
-    pattern = GIT_DESCRIBE_MATCHER.format(
-        report["version"], report["patches"])
+    patterns = [
+        GIT_DESCRIBE_MATCHER.format(report["version"], patches)
+        for patches in report["patches"]
+    ]
+
+    def is_kernel_match(to_match):
+        """Check if a kernel version matches the provided one."""
+        matches = False
+
+        for pattern in patterns:
+            if re.match(pattern, git_describe):
+                matches = True
+                break
+
+        return matches
 
     git_describe = \
         result.get("git_describe_v", None) or result.get("git_describe", None)
 
-    if any([not git_describe, not re.match(pattern, git_describe)]):
+    if any([not git_describe, not is_kernel_match(git_describe)]):
         log.debug(
             "Git describe version does not match '%s', or no git "
-            "describe value", pattern
-        )
+            "describe value", patterns)
         is_valid = False
 
     return is_valid

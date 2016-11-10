@@ -56,6 +56,22 @@ X_DEADLINE_HEDEAR = "X-KernelTest-Deadline"
 X_PATCHES_HEADER = "X-KernelTest-PatchCount"
 
 
+def hack_patches_count(count):
+    """Hack the patches count.
+
+    Sometimes we don't get the correct count of patches applied, usually
+    differing by 1 patch.
+
+    :param count: The original patches count.
+    :return A list with original count, and original count + 1.
+    """
+    hacked = []
+
+    if count is not None:
+        hacked = [str(count), str(int(count) + 1)]
+    return hacked
+
+
 def fix_kernel_version(version):
     """Make sure the kernel version is correct.
 
@@ -130,7 +146,7 @@ def extract_patches_from_subject(subject):
         patches = match.group("patches")
         patches = patches.split("/")[1]
 
-    return patches
+    return hack_patches_count(patches)
 
 
 def extract_from_headers(mail):
@@ -162,7 +178,7 @@ def extract_from_headers(mail):
         extracted["tree"] = extract_tree_name(tree)
 
     if patches is not None:
-        extracted["patches"] = str(patches)
+        extracted["patches"] = hack_patches_count(patches)
 
     return extracted
 
@@ -194,10 +210,12 @@ def extract_from_subject(subject):
             if tree == "stable":
                 tree = "stable-queue"
 
+            patches = [str(patches), str(int(patches) + 1)]
+
             extracted = {
                 "tree": tree,
                 "version": version,
-                "patches": str(patches)
+                "patches": patches
             }
 
     return extracted
@@ -252,7 +270,7 @@ def extract_mail_values(mail):
                 log.debug("No patches found in the headers, parsing subject")
                 patches = extract_patches_from_subject(subject)
                 if patches:
-                    data["patches"] = str(patches)
+                    data["patches"] = patches
 
             if data:
                 log.info("New valid email found: %s", subject)
