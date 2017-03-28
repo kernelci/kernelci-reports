@@ -35,8 +35,6 @@ SUBJECT_PATCH_RGX = re.compile(
 )
 # Is the message a reply?
 SUBJECT_RE_RGX = re.compile(r"^Re:?")
-# Do we have the local/ in the branch name?
-LOCAL_BRANCH_RGX = re.compile(r"^local/")
 # To extract the tree name from the mail header.
 TREE_RGX = re.compile(r"(?<=/)(?P<tree>[\w-]*(?=\.git))")
 # Is the kernel being tested a -rc one?
@@ -165,10 +163,6 @@ def extract_from_headers(mail):
     patches = mail[X_PATCHES_HEADER] or None
 
     if branch:
-        # git_branch on our database is stored as "local/branch".
-        if not LOCAL_BRANCH_RGX.match(branch):
-            branch = "local/{:s}".format(branch)
-
         extracted["branch"] = branch
 
     if version:
@@ -266,7 +260,7 @@ def extract_mail_values(mail):
 
             # If we still don't have the patches count, parse the subject
             # and extract it from there.
-            if all([data, not data.get("patches")]):
+            if data and not data.get("patches"):
                 log.debug("No patches found in the headers, parsing subject")
                 patches = extract_patches_from_subject(subject)
                 if patches:

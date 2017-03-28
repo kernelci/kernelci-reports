@@ -92,6 +92,7 @@ def send_report(result, report, options):
         "boot_report": 1,
         "job": result["job"],
         "kernel": result["kernel"],
+        "git_branch": result["git_branch"],
         "format": ["txt"],
         "send_to": send_to
     }
@@ -152,7 +153,7 @@ def is_valid_result(result, report):
     git_describe = \
         result.get("git_describe_v", None) or result.get("git_describe", None)
 
-    if any([not git_describe, not is_kernel_match(git_describe)]):
+    if not git_describe or not is_kernel_match(git_describe):
         log.debug(
             "Git describe version does not match '%s', or no git "
             "describe value", patterns)
@@ -192,8 +193,10 @@ def handle_result(response, report, database, options):
 
             if valid_result:
                 log.info(
-                    "Found valid job from backend: %s - %s",
-                    valid_result["job"], valid_result["kernel"])
+                    "Found valid job from backend: %s - %s - %s",
+                    valid_result["job"],
+                    valid_result["git_branch"],
+                    valid_result["kernel"])
 
                 status = valid_result["status"]
                 if status == "PASS":
@@ -206,10 +209,10 @@ def handle_result(response, report, database, options):
                         # backend. If so, schedule the email reports for
                         # later.
                         if int(result["count"]) > 0:
-                            response = \
-                                send_report(valid_result, report, options)
-                            if any([response.status_code == 202,
-                                    response.status_code == 200]):
+                            response = send_report(
+                                valid_result, report, options)
+                            if (response.status_code == 202 or
+                                    response.status_code == 200):
                                 _delete_report()
                         else:
                             log.info("No boot reports yet, retrying later")
@@ -258,6 +261,7 @@ def check_and_send(options):
             tree = r_get("tree")
             version = r_get("version")
             deadline = r_get("deadline")
+            branch = r_get("branch")
 
             now = datetime.datetime.utcnow()
             # Time when the scheduled report should be sent by the backend.
@@ -267,7 +271,7 @@ def check_and_send(options):
 
             log.info(
                 "Working on: %s - %s / %s", tree, version, r_get("patches"))
-            if any([now >= deadline, scheduled >= deadline]):
+            if now >= deadline or scheduled >= deadline:
                 log.info(
                     "Removing mail request, past the deadline: %s - %s",
                     deadline, scheduled)
@@ -278,6 +282,8 @@ def check_and_send(options):
                     ("job", tree),
                     ("kernel_version", version)
                 ]
+                if branch:
+                    params.append(("git_branch", branch))
                 response = utils.backend.get(url, params)
                 handle_result(response, report, database, options)
     finally:

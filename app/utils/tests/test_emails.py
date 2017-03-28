@@ -145,7 +145,7 @@ class TestEmails(unittest.TestCase):
             "tree": "stable-rc",
             "patches": ["47", "48"],
             "version": "4.6.1",
-            "branch": "local/linux-4.6.y"
+            "branch": "linux-4.6.y"
         }
 
         extracted = utils.emails.extract_from_headers(mail)
